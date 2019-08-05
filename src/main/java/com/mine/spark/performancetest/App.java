@@ -6,6 +6,9 @@ import com.mine.spark.performancetest.tasks.DriverTask;
 import org.apache.spark.SparkConf;
 import org.apache.spark.SparkContext;
 import org.apache.spark.rdd.RDD;
+import org.apache.spark.sql.Dataset;
+import org.apache.spark.sql.Row;
+import org.apache.spark.sql.SparkSession;
 
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
@@ -20,44 +23,48 @@ public class App {
   static Set<DriverTask> activeTasks = Sets.newSetFromMap( Maps.newConcurrentMap() );
 
   public static void main( String[] args ) {
-    System.out.println( "Simple byte for byte read/write without serialization" );
+    System.out.println( "Serializing rows into Dataset without Schema" );
 
-    SparkConf sparkConf = new SparkConf().setMaster( "yarn" );
-    SparkContext sc = new SparkContext( sparkConf );
+    SparkSession spark = SparkSession.builder().master( "yarn" ).getOrCreate();
 
-    Supplier<RDD<String>> readAction = () -> loadDefaultAction( sc );
-    CompletableFuture<RDD<String>> result = CompletableFuture.supplyAsync( readAction, App::runOnDriver );
+    Supplier<Dataset<Row>> readAction = () -> loadDefaultAction( spark );
+    CompletableFuture<Dataset<Row>> result = CompletableFuture.supplyAsync( readAction, App::runOnDriver );
     result.thenApply( App::writeFiles );
-    result.thenAcceptAsync( App::collectMetrics, App::runOnDriver );
 
     try {
       result.get();
     } catch ( InterruptedException | ExecutionException e ) {
       System.out.println( "Died here - " + e.getMessage() );
     }
+
+    if ( triggeredFinalAction.get() ) {
+      activeTasks.forEach( t -> t.cancel( false ) );
+    } else {
+      result.thenAcceptAsync( App::collectMetrics, App::runOnDriver );
+    }
   }
 
-  private static RDD<String> loadDefaultAction( SparkContext sc ) {
-    triggeredFinalAction.set( true );
-    return sc.textFile( "hdfs:/user/devuser/chris/AWS/amazon_reviews_us_Apparel_v1_00.tsv", 1 );
+  private static Dataset<Row> loadDefaultAction( SparkSession spark ) {
+    return spark.read()
+        .format( "org.apache.spark.csv" )
+        .option( "delimiter", "\t" )
+        .option( "header", true )
+        .csv( "hdfs:/user/devuser/chris/AWS/amazon_reviews_us_Apparel_v1_00.tsv" );
   }
 
   private static synchronized void runOnDriver( Runnable r ) {
     DriverTask dt = new DriverTask( r, null );
     activeTasks.add( dt );
-    if ( triggeredFinalAction.get() ) {
-      activeTasks.forEach( t -> t.cancel( false ) );
-    } else {
-      Executors.newCachedThreadPool().submit( dt );
-    }
+    Executors.newCachedThreadPool().submit( dt );
   }
 
-  private static void collectMetrics( RDD<String> output ) {
+  private static void collectMetrics( Dataset<Row> output ) {
       output.count();
   }
 
-  private static RDD<String> writeFiles ( RDD<String> output ) {
-    output.saveAsTextFile( FILE_OUT + "performance_test" + System.currentTimeMillis() + ".out" );
+  private static Dataset<Row> writeFiles ( Dataset<Row> output ) {
+    triggeredFinalAction.set( true );
+    output.write().save( FILE_OUT + "performance_test" + System.currentTimeMillis() + ".out"  );
     return output;
   }
 }

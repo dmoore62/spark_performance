@@ -20,7 +20,7 @@ public class App {
   static Set<DriverTask> activeTasks = Sets.newSetFromMap( Maps.newConcurrentMap() );
 
   public static void main( String[] args ) {
-    System.out.println( "Hello World" );
+    System.out.println( "Simple byte for byte read/write without serialization" );
 
     SparkConf sparkConf = new SparkConf().setMaster( "yarn" );
     SparkContext sc = new SparkContext( sparkConf );

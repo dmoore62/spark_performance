@@ -3,12 +3,13 @@ package com.mine.spark.performancetest;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.mine.spark.performancetest.tasks.DriverTask;
-import org.apache.spark.SparkConf;
-import org.apache.spark.SparkContext;
-import org.apache.spark.rdd.RDD;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SparkSession;
+import org.apache.spark.sql.types.DataTypes;
+import org.apache.spark.sql.types.Metadata;
+import org.apache.spark.sql.types.StructField;
+import org.apache.spark.sql.types.StructType;
 
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
@@ -23,7 +24,7 @@ public class App {
   static Set<DriverTask> activeTasks = Sets.newSetFromMap( Maps.newConcurrentMap() );
 
   public static void main( String[] args ) {
-    System.out.println( "Serializing rows into Dataset without Schema" );
+    System.out.println( "Serializing rows into Dataset with Schema" );
 
     SparkSession spark = SparkSession.builder().master( "yarn" ).getOrCreate();
 
@@ -45,10 +46,32 @@ public class App {
   }
 
   private static Dataset<Row> loadDefaultAction( SparkSession spark ) {
+
+    StructField[] fields = new StructField[]{
+      new StructField( "marketplace", DataTypes.StringType, true, Metadata.empty() ),
+      new StructField( "customer_id", DataTypes.StringType, true, Metadata.empty() ),
+      new StructField( "review_id", DataTypes.StringType, true, Metadata.empty() ),
+      new StructField( "product_id", DataTypes.StringType, true, Metadata.empty() ),
+      new StructField( "product_parent", DataTypes.StringType, true, Metadata.empty() ),
+      new StructField( "product_title", DataTypes.StringType, true, Metadata.empty() ),
+      new StructField( "product_category", DataTypes.StringType, true, Metadata.empty() ),
+      new StructField( "star_rating", DataTypes.StringType, true, Metadata.empty() ),
+      new StructField( "helpful_votes", DataTypes.StringType, true, Metadata.empty() ),
+      new StructField( "total_votes", DataTypes.StringType, true, Metadata.empty() ),
+      new StructField( "vine", DataTypes.StringType, true, Metadata.empty() ),
+      new StructField( "verified_purchase", DataTypes.StringType, true, Metadata.empty() ),
+      new StructField( "review_headline", DataTypes.StringType, true, Metadata.empty() ),
+      new StructField( "review_body", DataTypes.StringType, true, Metadata.empty() ),
+      new StructField( "review_date", DataTypes.StringType, true, Metadata.empty() )
+    };
+
+    StructType structType = new StructType( fields );
+
     return spark.read()
         .format( "org.apache.spark.csv" )
         .option( "delimiter", "\t" )
         .option( "header", true )
+        .schema( structType )
         .csv( "hdfs:/user/devuser/chris/AWS/amazon_reviews_us_Apparel_v1_00.tsv" );
   }
 

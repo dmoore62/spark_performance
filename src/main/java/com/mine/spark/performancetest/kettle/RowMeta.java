@@ -5,13 +5,14 @@ import org.w3c.dom.Node;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.io.Serializable;
 import java.math.BigDecimal;
 import java.net.SocketTimeoutException;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 
-public class RowMeta implements RowMetaInterface {
+public class RowMeta implements RowMetaInterface, Serializable {
   List<ValueMetaInterface> valueMetaList;
 
   public RowMeta() {

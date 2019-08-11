@@ -5,6 +5,7 @@ import org.w3c.dom.Node;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.io.Serializable;
 import java.math.BigDecimal;
 import java.net.SocketTimeoutException;
 import java.text.DecimalFormat;
@@ -13,11 +14,13 @@ import java.util.Date;
 import java.util.Locale;
 import java.util.TimeZone;
 
-public class ValueMetaString implements ValueMetaInterface {
+public class ValueMetaString implements ValueMetaInterface, Serializable {
   private String name;
+  private int type;
 
   public ValueMetaString( String name ) {
     this.name = name;
+    this.type = 2;
   }
 
   @Override
@@ -77,7 +80,7 @@ public class ValueMetaString implements ValueMetaInterface {
 
   @Override
   public int getType() {
-    return 0;
+    return type;
   }
 
   @Override
@@ -97,7 +100,7 @@ public class ValueMetaString implements ValueMetaInterface {
 
   @Override
   public int getTrimType() {
-    return 0;
+    return type;
   }
 
   @Override

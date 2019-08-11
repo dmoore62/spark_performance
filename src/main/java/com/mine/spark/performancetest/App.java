@@ -3,11 +3,17 @@ package com.mine.spark.performancetest;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.mine.spark.performancetest.functions.CreateObjectsFunction;
+import com.mine.spark.performancetest.functions.KettleStepFunction;
 import com.mine.spark.performancetest.functions.RowToKettleRowFunction;
 import com.mine.spark.performancetest.kettle.RowMeta;
 import com.mine.spark.performancetest.kettle.ValueMetaString;
+import com.mine.spark.performancetest.kettle.steps.ConcatStep;
+import com.mine.spark.performancetest.kettle.steps.Step;
+import com.mine.spark.performancetest.mappers.StructTypeMapper;
 import com.mine.spark.performancetest.rows.KettleRow;
 import com.mine.spark.performancetest.tasks.DriverTask;
+import org.apache.log4j.LogManager;
+import org.apache.log4j.Logger;
 import org.apache.spark.api.java.function.MapPartitionsFunction;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Encoders;
@@ -27,22 +33,34 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Supplier;
 
 public class App {
-  static final String FILE_OUT = "hdfs:/user/dmoore/out/";
+  static final Logger LOG = LogManager.getLogger( App.class );
   static AtomicBoolean triggeredFinalAction = new AtomicBoolean( false );
   static Set<DriverTask> activeTasks = Sets.newSetFromMap( Maps.newConcurrentMap() );
   static StructType structType;
+  private static String readFile;
+  private static String writeFile;
+  private static SparkSession spark;
 
   public static void main( String[] args ) {
+    verifyArgs( args );
     System.out.println( "Serializing rows into Dataset with Schema" );
 
-    SparkSession spark = SparkSession.builder().master( "yarn" ).getOrCreate();
+    spark = SparkSession.builder().getOrCreate();
 
-    Supplier<Dataset<Row>> readAction = () -> loadDefaultAction( spark );
-    CompletableFuture<Dataset<Row>> result = CompletableFuture.supplyAsync( readAction, App::runOnDriver );
+    //Multi-thread it
+    Supplier<Dataset<Row>> readAction = () -> loadDefaultAction();
+    CompletableFuture<Dataset<Row>> result =
+        CompletableFuture.supplyAsync( readAction, App::runOnDriver )
+            //.thenApply( App::convertToKettleRow )
+            //.thenApply( App::createObjectsForNoReason )
+            .thenApply( App::concatFieldsInWrappedFunction )
+            .thenApply( App::writeFiles )
+            .exceptionally( App::throwSomething );
 
-    result.thenApply( App::convertToKettleRow );
-    //result.thenApply( App::createObjectsForNoReason );
-    result.thenApply( App::writeFiles );
+      //Simple
+//    Dataset<Row> ds = loadDefaultAction( spark );
+//    ds = concatFieldsInWrappedFunction( ds );
+//    ds = writeFiles( ds );
 
     try {
       result.get();
@@ -52,12 +70,28 @@ public class App {
 
     if ( triggeredFinalAction.get() ) {
       activeTasks.forEach( t -> t.cancel( false ) );
+      //collectMetrics( ds );
     } else {
       result.thenAcceptAsync( App::collectMetrics, App::runOnDriver );
     }
   }
 
-  private static Dataset<Row> loadDefaultAction( SparkSession spark ) {
+  private static Dataset<Row> throwSomething( Throwable throwable ) {
+    LOG.debug( "<><><><<><><><> Bombed it !!!!! <><><<><<", throwable );
+    return spark.emptyDataset( Encoders.javaSerialization( Row.class ) );
+  }
+
+  private static void verifyArgs( String[] args ) {
+    if( args.length < 2 ) {
+      System.out.println( "Needs read/write files" );
+      System.exit( 1 );
+    } else {
+      readFile = args[0];
+      writeFile = args[1];
+    }
+  }
+
+  private static Dataset<Row> loadDefaultAction() {
     StructField[] fields = new StructField[]{
       new StructField( "marketplace", DataTypes.StringType, true, Metadata.empty() ),
       new StructField( "customer_id", DataTypes.StringType, true, Metadata.empty() ),
@@ -83,7 +117,7 @@ public class App {
         .option( "delimiter", "\t" )
         .option( "header", true )
         .schema( structType )
-        .csv( "hdfs:/user/devuser/chris/AWS/amazon_reviews_us_Apparel_v1_00.tsv" );
+        .csv( readFile );
   }
 
   private static synchronized void runOnDriver( Runnable r ) {
@@ -98,11 +132,39 @@ public class App {
 
   private static Dataset<Row> writeFiles ( Dataset<Row> output ) {
     triggeredFinalAction.set( true );
-    output.write().save( FILE_OUT + "performance_test" + System.currentTimeMillis() + ".out"  );
+    output
+        //.limit( 50 )
+        .write()
+        .option( "header", true )
+        .csv( writeFile + "performance_test" + System.currentTimeMillis() + ".out"  );
     return output;
   }
 
-  private static Dataset<KettleRow> convertToKettleRow( Dataset<Row> output ) {
+  private static Dataset<Row> convertToKettleRow( Dataset<Row> output ) {
+    RowMeta rowMeta = getRowMeta();
+
+    //This function will map everything to new objects using a single structTypeMapper
+    MapPartitionsFunction<Row, Row> function = new RowToKettleRowFunction( rowMeta );
+
+    return output.mapPartitions( function, Encoders.javaSerialization( Row.class ) );
+  }
+
+  private static Dataset<Row> createObjectsForNoReason( Dataset<Row> output ) {
+    MapPartitionsFunction<Row, Row> function = new CreateObjectsFunction( 100000 );
+    return output.mapPartitions( function, RowEncoder.apply( structType ) );
+  }
+
+  private static Dataset<Row> concatFieldsInWrappedFunction( Dataset<Row> output ) {
+    Step concatFields = new ConcatStep();
+    RowMeta rowMeta = getRowMeta();
+    rowMeta.addValueMeta( rowMeta.size(), new ValueMetaString( "concat_fields" ) );
+    KettleStepFunction function = new KettleStepFunction( concatFields, rowMeta );
+
+    StructType structType = new StructTypeMapper( rowMeta ).schema();
+    return output.mapPartitions( function, RowEncoder.apply( structType ) );
+  }
+
+  private static RowMeta getRowMeta() {
     RowMeta rowMeta = new RowMeta();
     rowMeta.addValueMeta( 0, new ValueMetaString( "marketplace" ) );
     rowMeta.addValueMeta( 1, new ValueMetaString( "customer_id" ) );
@@ -120,18 +182,6 @@ public class App {
     rowMeta.addValueMeta( 13, new ValueMetaString( "review_body" ) );
     rowMeta.addValueMeta( 14, new ValueMetaString( "review_date" ) );
 
-    //This function will map everything to new objects using new structtypemappers
-    MapPartitionsFunction<Row, KettleRow> function = new RowToKettleRowFunction( rowMeta );
-
-    return output.mapPartitions( function, Encoders.javaSerialization( KettleRow.class ) );
-  }
-
-  private static Dataset<Row> createObjectsForNoReason( Dataset<Row> output ) {
-    MapPartitionsFunction<Row, Row> function = new CreateObjectsFunction( 1000000 );
-    return output.mapPartitions( function, RowEncoder.apply( structType ) );
-  }
-
-  private static Dataset<Row> concatFieldsInWrappedFunction( Dataset<Row> output ) {
-    return null;
+    return rowMeta;
   }
 }

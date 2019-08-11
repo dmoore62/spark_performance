@@ -25,7 +25,8 @@ public class CreateObjectsFunction implements MapPartitionsFunction<Row, Row> {
       public Row next() {
         Row r = iterator.next();
         for ( int i = 0; i < number; i ++ ) {
-          Object o = new Object();
+          Object o = new String( "dumbObject" );
+          doSomethingWith( o );
         }
         return new GenericRowWithSchema( objects( r ), r.schema() );
       }
@@ -38,5 +39,14 @@ public class CreateObjectsFunction implements MapPartitionsFunction<Row, Row> {
         return result;
       }
     };
+  }
+
+  private void doSomethingWith( Object o ) {
+    try {
+      Thread.currentThread().wait( 300 );
+      o.toString();
+    } catch ( InterruptedException ex ) {
+      //doNothing
+    }
   }
 }

@@ -6,6 +6,7 @@ import com.mine.spark.performancetest.kettle.RowMeta;
 import com.mine.spark.performancetest.kettle.ValueMetaString;
 
 import java.io.Serializable;
+import java.util.Arrays;
 
 public class ConcatStep implements Step, Serializable {
   RowHandler rowHandler;
@@ -47,7 +48,8 @@ public class ConcatStep implements Step, Serializable {
 
   @Override
   public Object[] getRow() throws KettleException {
-    return rowHandler.getRow();
+    Object[] r = rowHandler.getRow();
+    return r == null ? makeRow() : r;
   }
 
   public void setRowHandler( RowHandler rowHandler ) {
@@ -56,5 +58,15 @@ public class ConcatStep implements Step, Serializable {
 
   public void setRowMeta( RowMeta rowMeta ) {
     this.rowMeta = rowMeta;
+  }
+
+  private Object[] makeRow() {
+    Object[] ret = new Object[rowMeta.size()];
+
+    for ( int i = 0; i < ret.length; i ++ ) {
+      ret[i] = new String();
+    }
+
+    return ret;
   }
 }

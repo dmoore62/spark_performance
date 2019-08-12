@@ -15,6 +15,7 @@ import com.mine.spark.performancetest.tasks.DriverTask;
 import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
 import org.apache.spark.api.java.function.MapPartitionsFunction;
+import org.apache.spark.rdd.RDD;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Encoders;
 import org.apache.spark.sql.Row;
@@ -35,7 +36,7 @@ import java.util.function.Supplier;
 public class App {
   static final Logger LOG = LogManager.getLogger( App.class );
   static AtomicBoolean triggeredFinalAction = new AtomicBoolean( false );
-  static Set<DriverTask> activeTasks = Sets.newSetFromMap( Maps.newConcurrentMap() );
+  //static Set<DriverTask> activeTasks = Sets.newSetFromMap( Maps.newConcurrentMap() );
   static StructType structType;
   private static String readFile;
   private static String writeFile;
@@ -48,32 +49,49 @@ public class App {
     spark = SparkSession.builder().getOrCreate();
 
     //Multi-thread it
-    Supplier<Dataset<Row>> readAction = () -> loadDefaultAction();
-    CompletableFuture<Dataset<Row>> result =
-        CompletableFuture.supplyAsync( readAction, App::runOnDriver )
-            //.thenApply( App::convertToKettleRow )
-            //.thenApply( App::createObjectsForNoReason )
-            .thenApply( App::concatFieldsInWrappedFunction )
-            .thenApply( App::writeFiles )
-            .exceptionally( App::throwSomething );
+//    Supplier<Dataset<Row>> readAction = () -> loadDefaultAction();
+//    CompletableFuture<Dataset<Row>> result =
+//        CompletableFuture.supplyAsync( readAction, App::runOnDriver )
+//            .thenApply( App::convertToKettleRow )
+//            .thenApply( App::createObjectsForNoReason )
+//            .thenApply( App::concatFieldsInWrappedFunction )
+//            .thenApply( App::writeFiles )
+//            .exceptionally( App::throwSomething );
 
-      //Simple
-//    Dataset<Row> ds = loadDefaultAction( spark );
-//    ds = concatFieldsInWrappedFunction( ds );
-//    ds = writeFiles( ds );
+    //Simple
+    //Dataset<Row> ds = loadDefaultAction();
+    //ds = concatFieldsInWrappedFunction( ds );
+    //writeFiles( ds );
 
-    try {
-      result.get();
-    } catch ( InterruptedException | ExecutionException e ) {
-      System.out.println( "Died here - " + e.getMessage() );
-    }
+    //Basic Dataset
+//    Dataset<Row> ds = spark.read()
+//        .format( "org.apache.spark.csv" )
+//        .option( "delimiter", "\t" )
+//        .option( "header", true )
+//        .option( "mode", "DROPMALFORMED")
+//        .schema( new StructType( getFields() ) )
+//        .csv( readFile );
+//
+//    ds.write()
+//        .option( "header", true )
+//        .csv( writeFile + "performance_test" + System.currentTimeMillis() + ".out"  );
 
-    if ( triggeredFinalAction.get() ) {
-      activeTasks.forEach( t -> t.cancel( false ) );
-      //collectMetrics( ds );
-    } else {
-      result.thenAcceptAsync( App::collectMetrics, App::runOnDriver );
-    }
+    //Basic RDD
+    RDD<String> rdd = spark.sparkContext().textFile( readFile, 1 );
+    rdd.saveAsTextFile( writeFile + "performance_test" + System.currentTimeMillis() + ".out" );
+
+//    try {
+//      result.get();
+//    } catch ( InterruptedException | ExecutionException e ) {
+//      System.out.println( "Died here - " + e.getMessage() );
+//    }
+
+//    if ( triggeredFinalAction.get() ) {
+//      //activeTasks.forEach( t -> t.cancel( false ) );
+//    } else {
+//      //result.thenAcceptAsync( App::collectMetrics, App::runOnDriver );
+//      collectMetrics( ds );
+//    }
   }
 
   private static Dataset<Row> throwSomething( Throwable throwable ) {
@@ -92,46 +110,29 @@ public class App {
   }
 
   private static Dataset<Row> loadDefaultAction() {
-    StructField[] fields = new StructField[]{
-      new StructField( "marketplace", DataTypes.StringType, true, Metadata.empty() ),
-      new StructField( "customer_id", DataTypes.StringType, true, Metadata.empty() ),
-      new StructField( "review_id", DataTypes.StringType, true, Metadata.empty() ),
-      new StructField( "product_id", DataTypes.StringType, true, Metadata.empty() ),
-      new StructField( "product_parent", DataTypes.StringType, true, Metadata.empty() ),
-      new StructField( "product_title", DataTypes.StringType, true, Metadata.empty() ),
-      new StructField( "product_category", DataTypes.StringType, true, Metadata.empty() ),
-      new StructField( "star_rating", DataTypes.StringType, true, Metadata.empty() ),
-      new StructField( "helpful_votes", DataTypes.StringType, true, Metadata.empty() ),
-      new StructField( "total_votes", DataTypes.StringType, true, Metadata.empty() ),
-      new StructField( "vine", DataTypes.StringType, true, Metadata.empty() ),
-      new StructField( "verified_purchase", DataTypes.StringType, true, Metadata.empty() ),
-      new StructField( "review_headline", DataTypes.StringType, true, Metadata.empty() ),
-      new StructField( "review_body", DataTypes.StringType, true, Metadata.empty() ),
-      new StructField( "review_date", DataTypes.StringType, true, Metadata.empty() )
-    };
-
-    structType = new StructType( fields );
+    structType = new StructType( getFields() );
 
     return spark.read()
         .format( "org.apache.spark.csv" )
         .option( "delimiter", "\t" )
         .option( "header", true )
+        .option( "mode", "DROPMALFORMED")
         .schema( structType )
         .csv( readFile );
   }
 
-  private static synchronized void runOnDriver( Runnable r ) {
-    DriverTask dt = new DriverTask( r, null );
-    activeTasks.add( dt );
-    Executors.newCachedThreadPool().submit( dt );
-  }
+//  private static synchronized void runOnDriver( Runnable r ) {
+//    DriverTask dt = new DriverTask( r, null );
+//    activeTasks.add( dt );
+//    Executors.newCachedThreadPool().submit( dt );
+//  }
 
   private static void collectMetrics( Dataset<Row> output ) {
       output.count();
   }
 
   private static Dataset<Row> writeFiles ( Dataset<Row> output ) {
-    triggeredFinalAction.set( true );
+    //triggeredFinalAction.set( true );
     output
         //.limit( 50 )
         .write()
@@ -183,5 +184,25 @@ public class App {
     rowMeta.addValueMeta( 14, new ValueMetaString( "review_date" ) );
 
     return rowMeta;
+  }
+
+  private static StructField[] getFields() {
+    return new StructField[]{
+        new StructField( "marketplace", DataTypes.StringType, true, Metadata.empty() ),
+        new StructField( "customer_id", DataTypes.StringType, true, Metadata.empty() ),
+        new StructField( "review_id", DataTypes.StringType, true, Metadata.empty() ),
+        new StructField( "product_id", DataTypes.StringType, true, Metadata.empty() ),
+        new StructField( "product_parent", DataTypes.StringType, true, Metadata.empty() ),
+        new StructField( "product_title", DataTypes.StringType, true, Metadata.empty() ),
+        new StructField( "product_category", DataTypes.StringType, true, Metadata.empty() ),
+        new StructField( "star_rating", DataTypes.StringType, true, Metadata.empty() ),
+        new StructField( "helpful_votes", DataTypes.StringType, true, Metadata.empty() ),
+        new StructField( "total_votes", DataTypes.StringType, true, Metadata.empty() ),
+        new StructField( "vine", DataTypes.StringType, true, Metadata.empty() ),
+        new StructField( "verified_purchase", DataTypes.StringType, true, Metadata.empty() ),
+        new StructField( "review_headline", DataTypes.StringType, true, Metadata.empty() ),
+        new StructField( "review_body", DataTypes.StringType, true, Metadata.empty() ),
+        new StructField( "review_date", DataTypes.StringType, true, Metadata.empty() )
+    };
   }
 }

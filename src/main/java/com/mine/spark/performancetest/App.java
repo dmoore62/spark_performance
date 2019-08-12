@@ -53,8 +53,8 @@ public class App {
     CompletableFuture<Dataset<Row>> result =
         CompletableFuture.supplyAsync( readAction, App::runOnDriver )
             //.thenApply( App::convertToKettleRow )
-            //.thenApply( App::createObjectsForNoReason )
-            .thenApply( App::concatFieldsInWrappedFunction )
+            .thenApply( App::createObjectsForNoReason )
+            //.thenApply( App::concatFieldsInWrappedFunction )
             .thenApply( App::writeFiles )
             .exceptionally( App::throwSomething );
 

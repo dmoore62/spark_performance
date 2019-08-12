@@ -42,11 +42,6 @@ public class CreateObjectsFunction implements MapPartitionsFunction<Row, Row> {
   }
 
   private void doSomethingWith( Object o ) {
-    try {
-      Thread.currentThread().wait( 300 );
-      o.toString();
-    } catch ( InterruptedException ex ) {
-      //doNothing
-    }
+    o.toString();
   }
 }

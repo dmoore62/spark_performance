@@ -52,7 +52,7 @@ public class App {
     Supplier<Dataset<Row>> readAction = () -> loadDefaultAction();
     CompletableFuture<Dataset<Row>> result =
         CompletableFuture.supplyAsync( readAction, App::runOnDriver )
-            //.thenApply( App::convertToKettleRow )
+            .thenApply( App::convertToKettleRow )
             //.thenApply( App::createObjectsForNoReason )
             //.thenApply( App::concatFieldsInWrappedFunction )
             .thenApply( App::writeFiles )
@@ -60,8 +60,9 @@ public class App {
 
     //Simple
 //    Dataset<Row> ds = loadDefaultAction();
+//    Dataset<Row> ds1 = convertToKettleRow( ds );
 //    //ds = concatFieldsInWrappedFunction( ds );
-//    writeFiles( ds );
+//    writeFiles( ds1 );
 
     //Basic RDD
 //    RDD<String> rdd = spark.sparkContext().textFile( readFile, 1 );
@@ -70,7 +71,7 @@ public class App {
     try {
       result.get();
     } catch ( InterruptedException | ExecutionException e ) {
-      System.out.println( "Died here - " + e.getMessage() );
+      LOG.debug( "Died Here <><><><>", e );
     }
 
     if ( triggeredFinalAction.get() ) {
@@ -133,7 +134,7 @@ public class App {
     //This function will map everything to new objects using a single structTypeMapper
     MapPartitionsFunction<Row, Row> function = new RowToKettleRowFunction( rowMeta );
 
-    return output.mapPartitions( function, Encoders.javaSerialization( Row.class ) );
+    return output.mapPartitions( function, RowEncoder.apply( structType ) );
   }
 
   private static Dataset<Row> createObjectsForNoReason( Dataset<Row> output ) {

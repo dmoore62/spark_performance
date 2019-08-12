@@ -36,7 +36,7 @@ import java.util.function.Supplier;
 public class App {
   static final Logger LOG = LogManager.getLogger( App.class );
   static AtomicBoolean triggeredFinalAction = new AtomicBoolean( false );
-  //static Set<DriverTask> activeTasks = Sets.newSetFromMap( Maps.newConcurrentMap() );
+  static Set<DriverTask> activeTasks = Sets.newSetFromMap( Maps.newConcurrentMap() );
   static StructType structType;
   private static String readFile;
   private static String writeFile;
@@ -49,36 +49,36 @@ public class App {
     spark = SparkSession.builder().getOrCreate();
 
     //Multi-thread it
-//    Supplier<Dataset<Row>> readAction = () -> loadDefaultAction();
-//    CompletableFuture<Dataset<Row>> result =
-//        CompletableFuture.supplyAsync( readAction, App::runOnDriver )
-//            .thenApply( App::convertToKettleRow )
-//            .thenApply( App::createObjectsForNoReason )
-//            .thenApply( App::concatFieldsInWrappedFunction )
-//            .thenApply( App::writeFiles )
-//            .exceptionally( App::throwSomething );
+    Supplier<Dataset<Row>> readAction = () -> loadDefaultAction();
+    CompletableFuture<Dataset<Row>> result =
+        CompletableFuture.supplyAsync( readAction, App::runOnDriver )
+            //.thenApply( App::convertToKettleRow )
+            //.thenApply( App::createObjectsForNoReason )
+            //.thenApply( App::concatFieldsInWrappedFunction )
+            .thenApply( App::writeFiles )
+            .exceptionally( App::throwSomething );
 
     //Simple
-    Dataset<Row> ds = loadDefaultAction();
-    //ds = concatFieldsInWrappedFunction( ds );
-    writeFiles( ds );
+//    Dataset<Row> ds = loadDefaultAction();
+//    //ds = concatFieldsInWrappedFunction( ds );
+//    writeFiles( ds );
 
     //Basic RDD
 //    RDD<String> rdd = spark.sparkContext().textFile( readFile, 1 );
 //    rdd.saveAsTextFile( writeFile + "performance_test" + System.currentTimeMillis() + ".out" );
 
-//    try {
-//      result.get();
-//    } catch ( InterruptedException | ExecutionException e ) {
-//      System.out.println( "Died here - " + e.getMessage() );
-//    }
+    try {
+      result.get();
+    } catch ( InterruptedException | ExecutionException e ) {
+      System.out.println( "Died here - " + e.getMessage() );
+    }
 
-//    if ( triggeredFinalAction.get() ) {
-//      //activeTasks.forEach( t -> t.cancel( false ) );
-//    } else {
-//      //result.thenAcceptAsync( App::collectMetrics, App::runOnDriver );
-//      collectMetrics( ds );
-//    }
+    if ( triggeredFinalAction.get() ) {
+      activeTasks.forEach( t -> t.cancel( false ) );
+    } else {
+      result.thenAcceptAsync( App::collectMetrics, App::runOnDriver );
+      //collectMetrics( ds );
+    }
   }
 
   private static Dataset<Row> throwSomething( Throwable throwable ) {
@@ -108,20 +108,19 @@ public class App {
         .csv( readFile );
   }
 
-//  private static synchronized void runOnDriver( Runnable r ) {
-//    DriverTask dt = new DriverTask( r, null );
-//    activeTasks.add( dt );
-//    Executors.newCachedThreadPool().submit( dt );
-//  }
+  private static synchronized void runOnDriver( Runnable r ) {
+    DriverTask dt = new DriverTask( r, null );
+    activeTasks.add( dt );
+    Executors.newCachedThreadPool().submit( dt );
+  }
 
   private static void collectMetrics( Dataset<Row> output ) {
       output.count();
   }
 
   private static Dataset<Row> writeFiles ( Dataset<Row> output ) {
-    //triggeredFinalAction.set( true );
+    triggeredFinalAction.set( true );
     output
-        //.limit( 50 )
         .write()
         .option( "header", true )
         .csv( writeFile + "performance_test" + System.currentTimeMillis() + ".out"  );

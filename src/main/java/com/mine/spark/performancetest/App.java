@@ -52,9 +52,9 @@ public class App {
     Supplier<Dataset<Row>> readAction = () -> loadDefaultAction();
     CompletableFuture<Dataset<Row>> result =
         CompletableFuture.supplyAsync( readAction, App::runOnDriver )
-            .thenApply( App::convertToKettleRow )
+            //.thenApply( App::convertToKettleRow )
             //.thenApply( App::createObjectsForNoReason )
-            //.thenApply( App::concatFieldsInWrappedFunction )
+            .thenApply( App::concatFieldsInWrappedFunction )
             .thenApply( App::writeFiles )
             .exceptionally( App::throwSomething );
 

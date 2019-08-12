@@ -24,6 +24,8 @@ public class ConcatStep implements Step, Serializable {
   public boolean processRow() throws KettleException {
     Object[] r = getRow();
 
+    if ( r == null ) return false;
+
     Object[] newRow = new Object[r.length + 1];
 
     for ( int i = 0; i < r.length; i ++ ) {
@@ -48,8 +50,7 @@ public class ConcatStep implements Step, Serializable {
 
   @Override
   public Object[] getRow() throws KettleException {
-    Object[] r = rowHandler.getRow();
-    return r == null ? makeRow() : r;
+    return rowHandler.getRow();
   }
 
   public void setRowHandler( RowHandler rowHandler ) {

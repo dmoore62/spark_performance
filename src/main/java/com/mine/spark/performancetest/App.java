@@ -59,26 +59,13 @@ public class App {
 //            .exceptionally( App::throwSomething );
 
     //Simple
-    //Dataset<Row> ds = loadDefaultAction();
+    Dataset<Row> ds = loadDefaultAction();
     //ds = concatFieldsInWrappedFunction( ds );
-    //writeFiles( ds );
-
-    //Basic Dataset
-//    Dataset<Row> ds = spark.read()
-//        .format( "org.apache.spark.csv" )
-//        .option( "delimiter", "\t" )
-//        .option( "header", true )
-//        .option( "mode", "DROPMALFORMED")
-//        .schema( new StructType( getFields() ) )
-//        .csv( readFile );
-//
-//    ds.write()
-//        .option( "header", true )
-//        .csv( writeFile + "performance_test" + System.currentTimeMillis() + ".out"  );
+    writeFiles( ds );
 
     //Basic RDD
-    RDD<String> rdd = spark.sparkContext().textFile( readFile, 1 );
-    rdd.saveAsTextFile( writeFile + "performance_test" + System.currentTimeMillis() + ".out" );
+//    RDD<String> rdd = spark.sparkContext().textFile( readFile, 1 );
+//    rdd.saveAsTextFile( writeFile + "performance_test" + System.currentTimeMillis() + ".out" );
 
 //    try {
 //      result.get();
